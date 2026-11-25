@@ -14,11 +14,36 @@ MODEL: DISC_MODEL + CIS
   ⇅
 MATH + JSON REGISTRY</pre><p>Registry records are validated and written atomically.</p></section></main>
 <script type="module">
+import { ISOMath } from "./src/math.js";
+import { ISODiscCIS, DiscModel, DiscMode, SortMode } from "./src/model.js";
+import { SortController } from "./src/controller.js";
+import { ISODuplicateView } from "./src/view.js";
 const $=id=>document.getElementById(id), parseNumbers=()=>$('numbers').value.split(',').map(v=>v.trim()).filter(Boolean).map(Number);
-async function request(url,options){const response=await fetch(url,options),body=await response.json();if(!response.ok)throw new Error(body.error||'Request failed');return body}
+const isStatic=location.hostname.endsWith('github.io'), storageKey='iso-discs-cis-registry-v1';
+function readLocal(){try{return JSON.parse(localStorage.getItem(storageKey)||'[]')}catch{return []}}
+function writeLocal(records){localStorage.setItem(storageKey,JSON.stringify(records))}
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function request(url,options={}){
+ if(!isStatic){const response=await fetch(url,options),body=await response.json();if(!response.ok)throw new Error(body.error||'Request failed');return body}
+ const method=options.method||'GET';
+ if(url==='/api/iso-discs/run'&&method==='POST'){
+  const input=JSON.parse(options.body||'{}'),cis=new ISODiscCIS(input.cis),model=new DiscModel({cis,mode:input.discMode||DiscMode.DUPLICATE}),controller=new SortController(input.sortMode||SortMode.SEQUENTIAL);
+  const result=model.inspect(input.values||[]);if(model.mode===DiscMode.DUPLICATE)result.output=controller.execute(input.values||[],input.seed);
+  if((input.values||[]).length)result.statistics={mean:ISOMath.mean(input.values),variance:ISOMath.variance(input.values),standardDeviation:ISOMath.standardDeviation(input.values)};
+  return new ISODuplicateView().render({cis,discMode:model.mode,sortMode:controller.mode,view:model.view,result});
+ }
+ if(url==='/api/iso-discs'&&method==='GET')return readLocal();
+ if(url==='/api/iso-discs'&&method==='POST'){
+  const r=JSON.parse(options.body||'{}');if(!String(r.id||'').trim())throw new Error('Record ID is required.');
+  const cis=new ISODiscCIS(r.cis||{}),record={id:String(r.id),label:String(r.label||r.id),cis:{code:cis.code,id:cis.id,status:cis.status},updatedAt:new Date().toISOString()};
+  const records=readLocal(),i=records.findIndex(x=>x.id===record.id);if(i<0)records.push(record);else records[i]=record;writeLocal(records);return record;
+ }
+ const match=url.match(/^\/api\/iso-discs\/([^/]+)$/);if(match&&method==='DELETE'){const id=decodeURIComponent(match[1]),records=readLocal(),next=records.filter(x=>x.id!==id);writeLocal(next);return {removed:next.length!==records.length}}
+ throw new Error('Unsupported static-mode operation.');
+}
 async function run(mode){const values=parseNumbers();if(values.some(v=>!Number.isFinite(v)))throw new Error('Enter only finite numbers.');const result=await request('/api/iso-discs/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values,sortMode:$('sortMode').value,discMode:mode||$('discMode').value,seed:42})});$('output').textContent=JSON.stringify(result,null,2);$('mathOutput').textContent=JSON.stringify(result.result.statistics||result.result,null,2)}
 async function refresh(){const records=await request('/api/iso-discs');$('records').innerHTML=records.map(r=>'<div class="record"><span><b>'+escapeHtml(r.label)+'</b><br><small>'+escapeHtml(r.id)+' · CIS '+r.cis.code+'/'+r.cis.id+' · '+r.cis.status+'</small></span><button data-remove="'+escapeHtml(r.id)+'" style="width:auto">Delete</button></div>').join('')||'<p>No registry entries.</p>'}
+if(isStatic){document.querySelector('header div:nth-child(1) div').textContent='MVC + Mathematical Library + Browser-local Registry';document.querySelector('header div:nth-child(2)').textContent='STATIC DEMO';document.querySelectorAll('main .card')[3].querySelector('p').textContent='GitHub Pages mode: calculations run in your browser; registry entries stay in this browser only.'}
 $('run').onclick=()=>run().catch(e=>$('output').textContent=e.message);$('check').onclick=()=>run('SYSTEM_CHECK').catch(e=>$('output').textContent=e.message);
 $('save').onclick=async()=>{try{await request('/api/iso-discs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('recordId').value,label:$('recordLabel').value,cis:{code:3,id:2,status:.14}})});await refresh()}catch(e){$('records').textContent=e.message}};
 $('refresh').onclick=()=>refresh().catch(e=>$('records').textContent=e.message);$('records').onclick=async e=>{const id=e.target.dataset.remove;if(!id)return;try{await request('/api/iso-discs/'+encodeURIComponent(id),{method:'DELETE'});await refresh()}catch(error){$('records').textContent=error.message}};refresh().catch(e=>$('records').textContent=e.message);

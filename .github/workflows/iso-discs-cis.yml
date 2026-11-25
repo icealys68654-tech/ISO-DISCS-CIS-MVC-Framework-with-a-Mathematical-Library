@@ -4,12 +4,43 @@ on:
     branches: [main, "feat/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iso-discs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  test-and-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm run iso-discs:test
+      - name: Validate JavaScript syntax
+        run: |
+          node --check server.js
+          for file in src/*.js test/*.js; do node --check "$file"; done
+      - name: Run ISO DISCS CIS tests
+        run: npm run iso-discs:test
+      - name: Smoke-test web server and API
+        run: |
+          PORT=4173 npm start > /tmp/iso-discs-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/health; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/iso-discs | grep -q "ISO DISCS CIS"
+          curl --fail --silent http://127.0.0.1:4173/api/iso-discs/run \
+            -H "content-type: application/json" \
+            -d '{"values":[8,3,5,3],"sortMode":"SEQUENTIAL","discMode":"DUPLICATE","seed":42}' \
+            | grep -q '"duplicates":\[3\]'
