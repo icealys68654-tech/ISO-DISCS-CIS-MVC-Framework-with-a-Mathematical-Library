@@ -1,3 +1,9 @@
+ISO DISCS CIS(code = 3, ID = 2, status = .14)
+
+SORT_CONTROLLER(*Sequential, *Output, *Random_Test).
+DISC_MODEL(*Duplicate, *Input, *System_Check){
+ISO_DUPLICATE_VIEW{*Sequential&output, *Duplicate&input}}
+
 # ISO DISCS CIS MVC Framework with a Mathematical Library
 
 A standalone JavaScript ES-module implementation of the ISO DISCS CIS workflow.
