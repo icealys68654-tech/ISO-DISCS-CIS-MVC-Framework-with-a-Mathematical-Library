@@ -3,16 +3,35 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createISODiscSystem, DiscRegistry, SortMode, DiscMode } from "./src/index.js";
+
 const root = path.dirname(fileURLToPath(import.meta.url));
 const registry = new DiscRegistry();
 const port = Number(process.env.PORT || 4173);
-const send = (res, status, body, type = "application/json") => { res.writeHead(status, { "content-type": type, "access-control-allow-origin": "*" }); res.end(type === "application/json" ? JSON.stringify(body) : body); };
-async function body(req) { let raw = ""; for await (const chunk of req) raw += chunk; return raw ? JSON.parse(raw) : {}; }
+const send = (res, status, body, type = "application/json") => {
+  res.writeHead(status, {
+    "content-type": type,
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "cache-control": type.startsWith("text/html") ? "no-cache" : "no-store"
+  });
+  res.end(type === "application/json" ? JSON.stringify(body) : body);
+};
+async function body(req) {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 1_000_000) throw new RangeError("Request body exceeds 1 MB");
+  }
+  return raw ? JSON.parse(raw) : {};
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-    if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,DELETE,OPTIONS", "access-control-allow-headers": "content-type" }); return res.end(); }
-    if (url.pathname === "/" || url.pathname === "/iso-discs") {
+    if (req.method === "GET" && url.pathname === "/health") {
+      return send(res, 200, { status: "ok", service: "iso-discs-cis-mvc" });
+    }
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/iso-discs")) {
       const html = await fs.readFile(path.join(root, "public/iso-discs.html"), "utf8");
       return send(res, 200, html, "text/html; charset=utf-8");
     }
@@ -28,6 +47,10 @@ const server = http.createServer(async (req, res) => {
     const match = url.pathname.match(/^\/api\/iso-discs\/([^/]+)$/);
     if (match && req.method === "DELETE") return send(res, 200, { removed: await registry.remove(decodeURIComponent(match[1])) });
     return send(res, 404, { error: "Not found" });
-  } catch (error) { return send(res, 400, { error: error.message || "Bad request" }); }
+  } catch (error) {
+    const status = error instanceof RangeError ? 413 : 400;
+    return send(res, status, { error: error.message || "Bad request" });
+  }
 });
-server.listen(port, () => process.stdout.write(`ISO DISCS CIS listening at http://localhost:${port}\n`));
+
+server.listen(port, "0.0.0.0", () => process.stdout.write(`ISO DISCS CIS listening on port ${port}\n`));
