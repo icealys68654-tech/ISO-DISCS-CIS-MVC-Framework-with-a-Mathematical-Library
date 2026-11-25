@@ -1,0 +1,14 @@
+{
+  "name": "iso-discs-cis-mvc-framework",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "ISO DISCS CIS MVC framework with mathematical utilities, persistent registry, dashboard, and tests.",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "iso-discs:test": "node --test test/*.test.js"
+  }
+}
