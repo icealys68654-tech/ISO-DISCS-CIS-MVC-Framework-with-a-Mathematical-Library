@@ -36,6 +36,14 @@ Open http://localhost:4173/iso-discs. Set `PORT` to change the server port.
 
 The `.github/workflows/iso-discs-cis.yml` workflow validates JavaScript syntax, runs the test suite, starts the server, and smoke-tests the health endpoint, dashboard, and MVC API on pushes, pull requests, and manual runs.
 
+## GitHub Pages (free static demo)
+
+The repository includes `.github/workflows/deploy-pages.yml`. After this change is merged into `main`, enable Pages once in **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow publishes the dashboard at:
+
+`https://icealys68654-tech.github.io/ISO-DISCS-CIS-MVC-Framework-with-a-Mathematical-Library/`
+
+GitHub Pages is static hosting, so this mode runs the MVC and math modules in the browser and stores registry entries in that browser's `localStorage`. Entries are not shared across devices or users and are not backed up to the server. The Node.js API and shared JSON registry remain available when the project is run on a Node-capable host. Do not use the static demo for sensitive data or production multi-user workflows.
+
 ## Deploy to Render
 
 A Render Blueprint is provided in `render.yaml`. In Render, create a new Blueprint deployment and select this repository. The configuration uses a Node.js web service and a 1 GB persistent disk mounted at `data`, so the JSON registry survives service restarts and redeployments.
